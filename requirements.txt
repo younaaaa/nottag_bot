@@ -1,0 +1,8 @@
+python-telegram-bot
+requests
+pytube
+spotipy
+mutagen
+pydub
+psycopg2
+redis
