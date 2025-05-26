@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: telegram_music_bot
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:latest
+    container_name: bot_postgres
+    environment:
+      POSTGRES_USER: bot_admin
+      POSTGRES_PASSWORD: secret_password
+      POSTGRES_DB: bot_database
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+    container_name: bot_redis
+
+volumes:
+  pg_data:

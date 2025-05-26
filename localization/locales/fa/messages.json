@@ -1,0 +1,5 @@
+{
+    "payment_success": "پرداخت با موفقیت انجام شد",
+    "payment_failed": "پرداخت ناموفق بود",
+    "select_payment_method": "لطفا روش پرداخت را انتخاب کنید"
+}
