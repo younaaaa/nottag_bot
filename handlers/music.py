@@ -1,16 +1,27 @@
 from telegram import Update
-from telegram.ext import CallbackContext, CallbackQueryHandler
-from utils.keyboards import music_keyboard
+from telegram.ext import (
+    ContextTypes,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters
+)
 
-def handle_music(update: Update, context: CallbackContext):
+async def handle_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مدیریت دستورات موزیک"""
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
-    keyboard = music_keyboard()
-    query.edit_message_text(
-        "مدیریت موزیک:",
-        reply_markup=keyboard
+    await query.edit_message_text(
+        text="لطفاً یک آهنگ ارسال کنید:",
+        reply_markup=await get_music_keyboard()
     )
 
-def setup_music_handlers(dispatcher):
-    dispatcher.add_handler(CallbackQueryHandler(handle_music, pattern='^music_'))
+async def handle_music_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """پردازش فایل موزیک"""
+    music_file = await update.message.audio.get_file()
+    await update.message.reply_text("فایل موزیک دریافت شد!")
+
+def setup_music_handlers(application):
+    """ثبت هندلرهای موزیک"""
+    application.add_handler(CallbackQueryHandler(handle_music, pattern="^music_"))
+    application.add_handler(MessageHandler(filters.AUDIO, handle_music_file))
