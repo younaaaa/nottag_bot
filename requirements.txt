@@ -7,4 +7,4 @@ requests==2.31.0
 cryptography==42.0.5
 cachetools==5.3.2
 mutagen==1.47.0
-flask
+Flask==3.0.2
