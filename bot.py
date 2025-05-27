@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("8173348502:AAGgAqN4GAOSIoq5W_DCKgy9tVjb-3l7Zgk")
 WEBHOOK_URL = f"https://api.render.com/deploy/srv-d0qfec3uibrs73ein9q0?key=gcgoD76kuL0"  # لینک خود را جایگزین کنید
 
-bot = telegram.Bot(token=BOT_TOKEN)
+bot = telegram.Bot(token=8173348502:AAGgAqN4GAOSIoq5W_DCKgy9tVjb-3l7Zgk)
 dispatcher = Dispatcher(bot, None, workers=4)
 
 # تنظیمات Flask برای Webhook
