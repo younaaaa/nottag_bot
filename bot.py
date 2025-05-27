@@ -1,37 +1,42 @@
 import os
 import logging
 import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler, filters
-from core.config import Config
-from localization.translate import Translator
-from music.youtube import download_audio
-from payment.zarinpal import ZarinPal
-from payment.paypal import PayPal
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, filters
+from flask import Flask, request
 
 # تنظیمات اولیه
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-translator = Translator(lang=os.getenv("DEFAULT_LANGUAGE", "fa"))
+# دریافت توکن از متغیر محیطی
+BOT_TOKEN = os.getenv("8173348502:AAGgAqN4GAOSIoq5W_DCKgy9tVjb-3l7Zgk")
+WEBHOOK_URL = f"https://api.render.com/deploy/srv-d0qfec3uibrs73ein9q0?key=gcgoD76kuL0"  # لینک خود را جایگزین کنید
 
-# راه‌اندازی ربات تلگرام
 bot = telegram.Bot(token=BOT_TOKEN)
-updater = Updater(token=BOT_TOKEN, use_context=True)
-dispatcher = updater.dispatcher
+dispatcher = Dispatcher(bot, None, workers=4)
+
+# تنظیمات Flask برای Webhook
+app = Flask(__name__)
+
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update = telegram.Update.de_json(request.get_json(), bot)
+    dispatcher.process_update(update)
+    return "OK"
 
 # دستور `/start`
 def start(update, context):
     user = update.message.from_user
     logger.info(f"User {user.username} started the bot.")
-    message = translator.translate("welcome_message")
-    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+    context.bot.send_message(chat_id=update.effective_chat.id, text="سلام! خوش آمدید!")
 
-# دانلود موسیقی از YouTube
+dispatcher.add_handler(CommandHandler("start", start))
+
+# دستور `/download` برای دانلود موسیقی از یوتیوب
 def download(update, context):
     url = context.args[0] if context.args else None
     if not url:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=translator.translate("provide_url"))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً لینک YouTube را ارسال کنید.")
         return
     
     try:
@@ -39,29 +44,29 @@ def download(update, context):
         context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, "rb"))
     except Exception as e:
         logger.error(f"Error downloading YouTube audio: {str(e)}")
-        context.bot.send_message(chat_id=update.effective_chat.id, text=translator.translate("download_error"))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="خطایی در دانلود موسیقی رخ داد.")
 
-# پرداخت با زرین‌پال
+dispatcher.add_handler(CommandHandler("download", download))
+
+# دستور `/pay` برای پرداخت زرین‌پال
 def pay(update, context):
     amount = int(context.args[0]) if context.args else None
     if not amount:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=translator.translate("provide_amount"))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً مبلغ پرداخت را وارد کنید.")
         return
 
     zarinpal = ZarinPal(os.getenv("ZARINPAL_MERCHANT_ID"))
     payment_data = zarinpal.create_payment(amount, "پرداخت سرویس", "https://your-website.com/callback")
     if payment_data["Status"] == 100:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=f"{translator.translate('payment_link')} {payment_data['payment_link']}")
+        context.bot.send_message(chat_id=update.effective_chat.id, text=f"لینک پرداخت: {payment_data['payment_link']}")
     else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=translator.translate("payment_failed"))
+        context.bot.send_message(chat_id=update.effective_chat.id, text="پرداخت ناموفق بود.")
 
-# اضافه کردن دستورات به ربات
-dispatcher.add_handler(CommandHandler("start", start))
-dispatcher.add_handler(CommandHandler("download", download))
 dispatcher.add_handler(CommandHandler("pay", pay))
 
-# اجرای ربات
+# تنظیم Webhook برای دریافت پیام‌ها
+bot.set_webhook(url=WEBHOOK_URL)
+
 if __name__ == "__main__":
     logger.info("Bot started successfully!")
-    updater.start_polling()
-    updater.idle()
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
