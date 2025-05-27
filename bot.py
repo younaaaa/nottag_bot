@@ -9,7 +9,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 logger = logging.getLogger(__name__)
 
 # دریافت توکن از متغیر محیطی
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("8173348502:AAGgAqN4GAOSIoq5W_DCKgy9tVjb-3l7Zgk")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN متغیر محیطی تنظیم نشده است.")
 
