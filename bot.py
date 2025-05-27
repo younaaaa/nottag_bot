@@ -1,48 +1,82 @@
 import os
 import logging
-import telegram
-from telegram.ext import Dispatcher, CommandHandler, MessageHandler, filters
-from flask import Flask, request
 import threading
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import (
+    Application, CommandHandler, ContextTypes,
+    MessageHandler, filters
+)
 
-# تنظیمات اولیه
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+# تنظیمات لاگ
+logging.basicConfig(
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# دریافت توکن از متغیر محیطی
+# بارگذاری متغیرها
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID")
+RENDER_API_KEY = os.getenv("RENDER_API_KEY")
+
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN متغیر محیطی تنظیم نشده است.")
+    raise ValueError("لطفاً BOT_TOKEN را در متغیرهای محیطی تنظیم کنید.")
 
-WEBHOOK_URL = f"https://api.render.com/deploy/{os.getenv('RENDER_SERVICE_ID')}?key={os.getenv('RENDER_API_KEY')}"
+WEBHOOK_URL = f"https://api.render.com/deploy/{RENDER_SERVICE_ID}?key={RENDER_API_KEY}"
 
-# راه‌اندازی ربات تلگرام
-bot = telegram.Bot(token=BOT_TOKEN)
-dispatcher = Dispatcher(bot, None, workers=4)
+# ربات تلگرام
+bot = Bot(token=BOT_TOKEN)
 
-# تنظیمات Flask برای Webhook
+# اطمینان از وجود دایرکتوری دانلود
+os.makedirs("downloads", exist_ok=True)
+
+# Flask app
 app = Flask(__name__)
 
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
-    update = telegram.Update.de_json(request.get_json(), bot)
-    
-    # پردازش به صورت چند ریسمانی
-    threading.Thread(target=dispatcher.process_update, args=(update,)).start()
-    
-    return "OK"
-
-# دستور `/start`
-def start(update, context):
-    user = update.message.from_user
+# توابع هندلر
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
     logger.info(f"User {user.username} started the bot.")
-    context.bot.send_message(chat_id=update.effective_chat.id, text="سلام! خوش آمدید!")
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="سلام! خوش آمدید!")
 
-dispatcher.add_handler(CommandHandler("start", start))
+async def download(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    url = context.args[0] if context.args else None
+    if not url:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً لینک YouTube را ارسال کنید.")
+        return
 
-# تابع دانلود موسیقی از یوتیوب
+    try:
+        file_path = download_audio(url)
+        await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, "rb"))
+    except Exception as e:
+        logger.error(f"خطا در دانلود موسیقی: {str(e)}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="خطایی در دانلود پیش آمد.")
+
+async def pay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        from zarinpal import ZarinPal
+    except ImportError:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="ماژول زرین‌پال نصب نیست.")
+        return
+
+    amount = int(context.args[0]) if context.args else None
+    if not amount:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً مبلغ را وارد کنید.")
+        return
+
+    zarinpal = ZarinPal(os.getenv("ZARINPAL_MERCHANT_ID"))
+    payment_data = zarinpal.create_payment(amount, "پرداخت سرویس", "https://your-website.com/callback")
+
+    if payment_data.get("Status") == 100:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"لینک پرداخت: {payment_data['payment_link']}")
+    else:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="پرداخت ناموفق بود.")
+
+# تابع دانلود موسیقی
 def download_audio(url):
     import yt_dlp
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(title)s.%(ext)s',
@@ -57,52 +91,24 @@ def download_audio(url):
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info).replace(".webm", ".mp3").replace(".mp4", ".mp3")
 
-# دستور `/download` برای دانلود موسیقی
-def download(update, context):
-    url = context.args[0] if context.args else None
-    if not url:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً لینک YouTube را ارسال کنید.")
-        return
-    
-    try:
-        file_path = download_audio(url)
-        context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, "rb"))
-    except Exception as e:
-        logger.error(f"خطا در دانلود موسیقی از یوتیوب: {str(e)}")
-        context.bot.send_message(chat_id=update.effective_chat.id, text="مشکلی در دانلود موسیقی پیش آمد.")
+# ساخت اپلیکیشن تلگرام
+application = Application.builder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("download", download))
+application.add_handler(CommandHandler("pay", pay))
 
-dispatcher.add_handler(CommandHandler("download", download))
+# اتصال Flask و Telegram webhook
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def webhook():
+    update_data = request.get_json(force=True)
+    update = Update.de_json(update_data, bot)
 
-# بررسی موجود بودن کلاس زرین‌پال
-try:
-    from zarinpal import ZarinPal
-except ImportError:
-    ZarinPal = None
+    # پردازش Async با Thread جداگانه
+    threading.Thread(target=lambda: application.update_queue.put(update)).start()
+    return "OK"
 
-# دستور `/pay` برای پرداخت با زرین‌پال
-def pay(update, context):
-    if not ZarinPal:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="ماژول زرین‌پال نصب نشده است.")
-        return
-
-    amount = int(context.args[0]) if context.args else None
-    if not amount:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً مبلغ پرداخت را وارد کنید.")
-        return
-
-    zarinpal = ZarinPal(os.getenv("ZARINPAL_MERCHANT_ID"))
-    payment_data = zarinpal.create_payment(amount, "پرداخت سرویس", "https://your-website.com/callback")
-    
-    if payment_data["Status"] == 100:
-        context.bot.send_message(chat_id=update.effective_chat.id, text=f"لینک پرداخت: {payment_data['payment_link']}")
-    else:
-        context.bot.send_message(chat_id=update.effective_chat.id, text="پرداخت ناموفق بود.")
-
-dispatcher.add_handler(CommandHandler("pay", pay))
-
-# تنظیم Webhook در تلگرام
-bot.set_webhook(url=WEBHOOK_URL)
-
+# راه‌اندازی Webhook و اجرای سرور
 if __name__ == "__main__":
-    logger.info("ربات با موفقیت راه‌اندازی شد!")
+    bot.set_webhook(url=WEBHOOK_URL)
+    logger.info("ربات با موفقیت راه‌اندازی شد.")
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
