@@ -3,17 +3,18 @@ import logging
 import telegram
 from telegram.ext import Dispatcher, CommandHandler, MessageHandler, filters
 from flask import Flask, request
+import threading
 
 # تنظیمات اولیه
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # دریافت توکن از متغیر محیطی
-BOT_TOKEN = os.getenv("8173348502:AAGgAqN4GAOSIoq5W_DCKgy9tVjb-3l7Zgk")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN متغیر محیطی تنظیم نشده است.")
 
-WEBHOOK_URL = f"https://api.render.com/deploy/srv-d0qfec3uibrs73ein9q0?key=gcgoD76kuL0/{8173348502:AAGgAqN4GAOSIoq5W_DCKgy9tVjb-3l7Zgk}"  # لینک خود را جایگزین کنید
+WEBHOOK_URL = f"https://api.render.com/deploy/{os.getenv('RENDER_SERVICE_ID')}?key={os.getenv('RENDER_API_KEY')}"
 
 # راه‌اندازی ربات تلگرام
 bot = telegram.Bot(token=BOT_TOKEN)
@@ -25,7 +26,10 @@ app = Flask(__name__)
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = telegram.Update.de_json(request.get_json(), bot)
-    dispatcher.process_update(update)
+    
+    # پردازش به صورت چند ریسمانی
+    threading.Thread(target=dispatcher.process_update, args=(update,)).start()
+    
     return "OK"
 
 # دستور `/start`
@@ -36,7 +40,24 @@ def start(update, context):
 
 dispatcher.add_handler(CommandHandler("start", start))
 
-# دستور `/download` برای دانلود موسیقی از YouTube
+# تابع دانلود موسیقی از یوتیوب
+def download_audio(url):
+    import yt_dlp
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': 'downloads/%(title)s.%(ext)s',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        return ydl.prepare_filename(info).replace(".webm", ".mp3").replace(".mp4", ".mp3")
+
+# دستور `/download` برای دانلود موسیقی
 def download(update, context):
     url = context.args[0] if context.args else None
     if not url:
@@ -52,8 +73,18 @@ def download(update, context):
 
 dispatcher.add_handler(CommandHandler("download", download))
 
+# بررسی موجود بودن کلاس زرین‌پال
+try:
+    from zarinpal import ZarinPal
+except ImportError:
+    ZarinPal = None
+
 # دستور `/pay` برای پرداخت با زرین‌پال
 def pay(update, context):
+    if not ZarinPal:
+        context.bot.send_message(chat_id=update.effective_chat.id, text="ماژول زرین‌پال نصب نشده است.")
+        return
+
     amount = int(context.args[0]) if context.args else None
     if not amount:
         context.bot.send_message(chat_id=update.effective_chat.id, text="لطفاً مبلغ پرداخت را وارد کنید.")
@@ -61,6 +92,7 @@ def pay(update, context):
 
     zarinpal = ZarinPal(os.getenv("ZARINPAL_MERCHANT_ID"))
     payment_data = zarinpal.create_payment(amount, "پرداخت سرویس", "https://your-website.com/callback")
+    
     if payment_data["Status"] == 100:
         context.bot.send_message(chat_id=update.effective_chat.id, text=f"لینک پرداخت: {payment_data['payment_link']}")
     else:
