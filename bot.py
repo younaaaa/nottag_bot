@@ -1,7 +1,7 @@
 import os
 import logging
 import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, MessageHandler, filters
 from core.config import Config
 from localization.translate import Translator
 from music.youtube import download_audio
