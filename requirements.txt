@@ -6,3 +6,4 @@ mutagen
 pydub
 psycopg2
 redis
+gunicorn
