@@ -1,35 +1,25 @@
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters,
-    ContextTypes
-)
+from telegram.ext import Application
+import os
 from config import Config
-import logging
 
-# تنظیمات لاگ
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """مدیریت دستور /start"""
-    await update.message.reply_text("به ربات خوش آمدید!")
+async def post_init(app):
+    await app.bot.set_webhook(f"{Config.WEBHOOK_URL}/{Config.BOT_TOKEN}")
 
 def main():
-    # ساخت نمونه Application
-    application = Application.builder().token(Config.BOT_TOKEN).build()
+    application = Application.builder() \
+        .token(Config.BOT_TOKEN) \
+        .post_init(post_init) \
+        .build()
     
-    # ثبت هندلرها
-    application.add_handler(CommandHandler("start", start))
+    # پورت اجباری برای Render.com
+    port = int(os.environ.get('PORT', 10000))
     
-    # شروع ربات
-    application.run_polling()
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        webhook_url=f"{Config.WEBHOOK_URL}/{Config.BOT_TOKEN}",
+        secret_token='WEBHOOK_SECRET'  # اختیاری برای امنیت بیشتر
+    )
 
 if __name__ == '__main__':
     main()
