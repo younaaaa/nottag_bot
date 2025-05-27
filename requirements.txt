@@ -1,9 +1,8 @@
-python-telegram-bot
-requests
-pytube
-spotipy
-mutagen
-pydub
-psycopg2
+python-telegram-bot==20.7
+Flask
+python-dotenv
+yt-dlp
+psycopg2-binary
 redis
 gunicorn
+zarinpal
