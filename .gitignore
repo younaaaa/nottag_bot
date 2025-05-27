@@ -1,1 +1,9 @@
-scripts.zip
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+data/
+logs/
+db_backups/
