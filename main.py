@@ -13,15 +13,13 @@ logger = logging.getLogger(__name__)
 def main():
     init_cache()
     
-    updater = Updater(
-        Config.BOT_TOKEN,
-        workers=8,
-        use_context=True
+    application = Application.builder().token("TOKEN").build()
+
     )
     
     setup_handlers(updater.dispatcher)
     
-    updater.start_polling()
+    application.run_polling()
     logger.info("Bot started successfully")
     updater.idle()
 
